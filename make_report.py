@@ -64,7 +64,7 @@ vals["STRATEGY_TABLE"] = ("\n".join(lines[2:]) + "\n\n*Real PDFs: course reader,
                           "B and C were run on an evenly spread subset (every 3rd question) for time.*")
 d = load("D", "real")
 if d:
-    lines.append("\n## Strategy D by question type (real PDFs)\n")
+    lines.append("\n## Strategy D (first run) by question type (real PDFs)\n")
     lines.append("| Type | Passed |\n|---|---|")
     for t, f in d["summary"]["by_type"].items():
         lines.append(f"| {t} | {f} |")
@@ -97,7 +97,7 @@ if d:
     allrows = d["rows"] + (load("D", "redteam") or {"rows": []})["rows"]
     vals["AVG_CALLS"] = f"{sum(r['calls'] for r in allrows)/len(allrows):.1f}"
     vals["AVG_LATENCY"] = f"{sum(r.get('seconds', 0) for r in allrows)/len(allrows):.0f}"
-    lines.append("\n## Strategy D failures (honest list)\n")
+    lines.append("\n## Strategy D (first run) failures (honest list)\n")
     for r in d["rows"]:
         if not r["ok"]:
             lines.append(f"- [{r['type']}] {r['question']} -> {r['status']}: {r['answer'][:200]!r}")
@@ -105,6 +105,18 @@ vals["WRONG_PENALTY"] = str(WRONG_PENALTY)
 if os.path.exists("logs/GROUNDING_SWEEP.md"):
     gs = open("logs/GROUNDING_SWEEP.md", encoding="utf-8").read().splitlines()
     vals["GROUNDING_SWEEP_TABLE"] = "\n".join(l for l in gs if l.startswith("|"))
+
+_df = load_any("Dfinal", "real")
+if _df:
+    lines.append("\n## Strategy D FINAL code (fingerprinting + all fixes) by question type (real PDFs)\n")
+    lines.append("| Type | Passed |\n|---|---|")
+    for t, fr in _df["summary"]["by_type"].items():
+        lines.append(f"| {t} | {fr} |")
+    lines.append("\n## Strategy D FINAL code failures (honest list)\n")
+    for r in _df["rows"]:
+        if not r["ok"]:
+            lines.append(f"- [{r['type']}] {r['question']} -> {r['status']}: {r['answer'][:200]!r}")
+    lines.append("\nTwo full D runs both scored 14/19 but missed different questions: multi-page and contradiction answers vary run to run on an 8B model.")
 
 rt = load("D", "redteam")
 if rt:
