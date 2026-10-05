@@ -1,0 +1,630 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PageProof Study Guide</title><style>
+body{font-family:Segoe UI,Arial,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;line-height:1.55;color:#1d1d1f;background:#fff}
+h1{border-bottom:3px solid #2563eb;padding-bottom:6px} h2{margin-top:40px;color:#1e3a8a;border-bottom:1px solid #ddd;padding-bottom:4px}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px} th,td{border:1px solid #ccc;padding:6px 8px;vertical-align:top;text-align:left}
+th{background:#eef2ff} tr:nth-child(even) td{background:#fafafa} code{background:#f1f1f1;padding:1px 4px;border-radius:3px}
+pre{background:#f6f8fa;padding:12px;overflow-x:auto;border-radius:6px;font-size:13px} pre code{background:none}
+</style></head><body><h1>PageProof — Study Guide &amp; 5-Minute Pitch</h1>
+<p>Team SOUL SOCIETY · RAP Hackathon 2026 · 5 Oct 2026</p>
+<p>Contents
+1. PageProof in 60 seconds
+2. How it works, step by step
+3. ML and AI terms, explained simply
+4. Our real results
+5. Your 17 points, one by one
+6. 5-minute script (English)
+7. 5-minute script (Tanglish)
+8. Judge Q&amp;A cheat sheet
+9. Honest limits and next fixes</p>
+<hr />
+<h2>1. PageProof in 60 seconds</h2>
+<p><strong>PageProof is a chat app that answers questions about any uploaded PDF, using only 4 tools, at most 6 tool calls per question, and only what the PDF proves.</strong></p>
+<p><strong>The problem.</strong> Companies want answers from their own documents (policies, contracts, manuals). The usual fix is RAG: cut every document into chunks, turn them into vectors, and store them in a vector database. That costs money and setup for every document set, goes stale when documents change, and the AI can still make answers up. The hackathon bans RAG and asks: can an agent read a document the way a person does (check the contents page, search a word, open a page) on a strict budget?</p>
+<p><strong>Our answer.</strong> PageProof:
+- reads the PDF only through 4 tools: <code>list_documents</code>, <code>list_headings</code>, <code>get_page</code>, <code>search_keyword</code>
+- stops at 6 tool calls per question, enforced in code: call 7 is refused
+- accepts an answer only if it quotes a page it actually read for that question; otherwise it says "insufficient information"
+- treats text inside the PDF as data, never as commands, so hidden instructions are ignored
+- runs fully on the laptop (Ollama + <code>qwen3:8b</code>), so no document leaves the machine
+- logs every tool call in a trace the judges can download</p>
+<p><strong>One-line pitch:</strong> "No RAG. No vector database. Six tool calls. Every answer comes with a quote."</p>
+<p><strong>Tanglish:</strong> Namma PageProof oru chat app. Neenga oru PDF upload panni question kekkalam. Adhu 4 tools mattum use pannum: headings paakum, keyword search pannum, page padikkum. Oru question-ku maximum 6 tool calls dhaan; 7th call-a code-e block pannidum. Answer sonna, adhu padicha page-la irundhu quote kaatanum. Quote illa-na "insufficient information" nu sollidum, guess panna maattom. PDF-kulla "ignore your rules" nu edhavadhu ezhudhi irundha, adha data-va mattum paakum, command-a follow panna maattom. Ellame laptop-laye local-a odudhu; document veliya pogadhu.</p>
+<hr />
+<h2>2. How it works, step by step</h2>
+<pre><code> Upload PDF ──► DocStore builds ONLY the heading list (no page text stored for the agent)
+      │
+ Question ──► Fingerprint (regex, free): comparison / may-have-changed / multi-part / definition / fact
+      │
+      ▼
+ Agent loop (hand-written, no LangChain)          BudgetedToolbox counts + logs every call
+   Turn 1: list_headings + search_keyword  (2)    ── call 7 is REFUSED before it runs
+   Then:   get_page × 1–3                  (3)
+   Reserve: 1 call for amendment / next page (1)
+      │
+      ▼
+ final_answer (the &quot;+1&quot; call): status, answer, quotes, pages, confidence
+      │
+      ▼
+ Gates:  ① decline check   ② grounding gate (quote on a page read, 0.8)   ③ confidence ≥ 0.4
+      │                         fail ──► &quot;insufficient information&quot; (guess shown, labelled)
+      ▼
+ UI: answer + ✅ quotes + tool timeline + call meter + trace download
+</code></pre>
+<ol>
+<li><strong>Upload.</strong> <code>DocStore</code> reads the PDF's outline. If there is none, it finds headings from font size and bold text. That is all it builds. No page text is cached for the agent.</li>
+<li><strong>Fingerprint.</strong> A free regex check labels the question type and adds a route hint, e.g. "may have changed → spend the reserve call searching for 'amend'". It uses no tool call and no LLM call.</li>
+<li><strong>Turn 1, two calls at once.</strong> <code>list_headings</code> (the map) and <code>search_keyword</code> (the coordinates).</li>
+<li><strong>Read 1–3 pages</strong> with <code>get_page</code>, one page per call.</li>
+<li><strong>Reserve call.</strong> One call is kept back for an amendment or a page that continues.</li>
+<li><strong>Budget.</strong> <code>BudgetedToolbox</code> counts every call, failed ones too, and logs it. Call 7 is refused before it runs, so a question can never go over budget.</li>
+<li><strong>Final answer.</strong> The model calls <code>final_answer</code> with status, answer, verbatim quotes, pages and confidence.</li>
+<li><strong>Gates.</strong></li>
+<li>Decline check: if the model gives up while unread search hits and budget remain, the harness pushes back once.</li>
+<li>Grounding gate: at least one quote must be on a page fetched for this question (verbatim, or 80% of its 3-word runs with every number matching).</li>
+<li>Confidence: below 0.4 → decline.</li>
+<li>If a gate fails → "insufficient information". The withheld guess is still shown, clearly labelled.</li>
+<li><strong>Show everything.</strong> Answer, ✅/❓ quotes, a timeline of every call, a 6-slot meter, and a downloadable JSONL trace.</li>
+</ol>
+<p><strong>Tanglish:</strong> PDF upload pannumbodhu headings list mattum ready pannrom. Question vandha, mudhalla adhu enna type nu regex vechu kandupidippom (free, call illa). Apram 2 calls: headings + keyword search. Adhukkapram 1–3 pages padikkum. Oru call reserve-a vechirukkom (amendment check panna). 7th call vandha code-e block pannidum. Kadaisiya answer-oda quote varum; adha naama check pannuvom. Quote padicha page-la illa-na "insufficient information".</p>
+<hr />
+<h2>3. ML and AI terms, explained simply</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Simple meaning</th>
+<th>Tanglish</th>
+<th>Where in PageProof</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LLM (Large Language Model)</td>
+<td>AI trained on huge text; predicts next words, can reason and write</td>
+<td>Romba text-la train panna AI</td>
+<td><code>qwen3:8b</code> picks tools and writes the answer</td>
+</tr>
+<tr>
+<td>Agent / agentic AI</td>
+<td>LLM that works in steps: think, use a tool, look, decide again</td>
+<td>Yosichu, tool use panni, result paathu decide pannum</td>
+<td><code>DocAgent</code> in <code>agent.py</code></td>
+</tr>
+<tr>
+<td>Tool / function calling</td>
+<td>LLM asks the program to run a named function and gets the result</td>
+<td>"Indha function run pannu" nu AI kekkum</td>
+<td>Our 4 tools + <code>final_answer</code></td>
+</tr>
+<tr>
+<td>Harness</td>
+<td>The code around the LLM: loop, budget, logging, checks</td>
+<td>AI-ya control panra code</td>
+<td><code>BudgetedToolbox</code>, gates, trace (20% of score)</td>
+</tr>
+<tr>
+<td>ReAct</td>
+<td>Common pattern: Reason, then Act, repeat</td>
+<td>Yosi, act pannu, repeat</td>
+<td>Strategy A, our baseline</td>
+</tr>
+<tr>
+<td>RAG</td>
+<td>Retrieve chunks from a database, then answer from them</td>
+<td>Database-la irundhu text eduthu AI-ku kudukkuradhu</td>
+<td>Banned, not used</td>
+</tr>
+<tr>
+<td>Embedding / vector</td>
+<td>Numbers that represent meaning</td>
+<td>Text meaning-a numbers-a maathuradhu</td>
+<td>Banned, never created</td>
+</tr>
+<tr>
+<td>Vector database</td>
+<td>Finds text by meaning using embeddings</td>
+<td>Meaning vechu thedura DB</td>
+<td>Banned, not used</td>
+</tr>
+<tr>
+<td>Keyword (lexical) search</td>
+<td>Find pages containing the exact word, like Ctrl+F</td>
+<td>Ctrl+F maadhiri</td>
+<td><code>search_keyword</code>, returns page numbers only</td>
+</tr>
+<tr>
+<td>Context window</td>
+<td>How much text the LLM sees at once</td>
+<td>Oru time-la evlo text paakum</td>
+<td>16k tokens</td>
+</tr>
+<tr>
+<td>Token</td>
+<td>A piece of a word; LLMs count text in tokens</td>
+<td>Word-oda pieces</td>
+<td>Limits context and output</td>
+</tr>
+<tr>
+<td>Temperature</td>
+<td>Randomness; 0 = most repeatable</td>
+<td>0-na same answer varum</td>
+<td>We use 0</td>
+</tr>
+<tr>
+<td>Hallucination</td>
+<td>AI confidently says something false or not in the source</td>
+<td>Confident-a poi solradhu</td>
+<td>Blocked by grounding gate</td>
+</tr>
+<tr>
+<td>Grounding</td>
+<td>Tying an answer to real source text</td>
+<td>Answer-a document text-oda link panradhu</td>
+<td>Must quote a page it read</td>
+</tr>
+<tr>
+<td>Grounding gate</td>
+<td>Our check that a quote really appears on a page read</td>
+<td>Quote unmaiyaa irukka check</td>
+<td><code>_quote_supported()</code>, 0.8</td>
+</tr>
+<tr>
+<td>n-gram (3-gram)</td>
+<td>A run of n words; "refund window is" is one 3-gram</td>
+<td>Thodarndhu varra 3 words</td>
+<td>80% of a quote's 3-grams must match</td>
+</tr>
+<tr>
+<td>Confidence score</td>
+<td>How sure the model says it is, 0 to 1</td>
+<td>"Evlo sure" nu solra number</td>
+<td>0.4 backstop; model says 0.95–1.0 always</td>
+</tr>
+<tr>
+<td>Threshold</td>
+<td>Cut-off: above accept, below decline</td>
+<td>Cut-off value</td>
+<td>Grounding 0.8, confidence 0.4</td>
+</tr>
+<tr>
+<td>Calibration</td>
+<td>Does stated confidence match reality?</td>
+<td>Confidence unmaiyaa match aagudha</td>
+<td>Ours isn't, so we use quotes</td>
+</tr>
+<tr>
+<td>Prompt injection</td>
+<td>Text trying to hijack the AI ("ignore your rules")</td>
+<td>AI-ya emaathura text</td>
+<td>Page text fenced with a random marker</td>
+</tr>
+<tr>
+<td>System prompt</td>
+<td>Hidden rules given to the AI</td>
+<td>Munnadiye kudukkura rules</td>
+<td><code>SYSTEM_PROMPT</code> in <code>agent.py</code></td>
+</tr>
+<tr>
+<td>Accuracy</td>
+<td>Share of questions answered correctly</td>
+<td>Evlo correct</td>
+<td>D: 14/19 (74%)</td>
+</tr>
+<tr>
+<td>Baseline</td>
+<td>Simple version to compare against</td>
+<td>Compare panna simple version</td>
+<td>Strategy A</td>
+</tr>
+<tr>
+<td>Benchmark / evaluation</td>
+<td>Fixed question set, scored</td>
+<td>Fixed questions vechu test</td>
+<td><code>eval.py</code>, 19 questions, 3 PDFs</td>
+</tr>
+<tr>
+<td>Red-team test</td>
+<td>Test designed to break the system</td>
+<td>Odaikka try panra test</td>
+<td>Northwind PDF, 6/6</td>
+</tr>
+<tr>
+<td>Latency</td>
+<td>Time per answer</td>
+<td>Evlo neram</td>
+<td>~52–60 s average</td>
+</tr>
+<tr>
+<td>Ollama</td>
+<td>Free tool that runs open LLMs locally</td>
+<td>Laptop-la LLM run panna</td>
+<td>Runs <code>qwen3:8b</code></td>
+</tr>
+<tr>
+<td>VRAM</td>
+<td>Graphics-card memory</td>
+<td>GPU memory</td>
+<td>8 GB RTX 5050</td>
+</tr>
+<tr>
+<td>Heuristic</td>
+<td>Practical rule of thumb, no guarantee</td>
+<td>Anubava rule</td>
+<td>Heading detection from fonts</td>
+</tr>
+<tr>
+<td>Question fingerprinting</td>
+<td>Our free regex classifier of question type</td>
+<td>Question type kandupidikkuradhu</td>
+<td><code>agent.py</code>, no tool/LLM call</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>4. Our real results (qwen3:8b, from <code>logs/RESULTS.md</code>)</h2>
+<p>19 hand-labelled questions on 3 real PDFs: the 204-page course reader, the US Constitution, "Attention Is All You Need".</p>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>Accuracy</th>
+<th>Avg calls</th>
+<th>Max calls</th>
+<th>Obeyed injection</th>
+<th>Over budget</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A. Naive ReAct (existing, no gates)</td>
+<td>12/19 (63%)</td>
+<td>3.7</td>
+<td>6</td>
+<td><strong>3/3</strong></td>
+<td>0</td>
+</tr>
+<tr>
+<td>B. Search-first (existing)</td>
+<td>5/7 subset</td>
+<td>3.9</td>
+<td>5</td>
+<td>0/2</td>
+<td>0</td>
+</tr>
+<tr>
+<td>C. Outline-first (existing)</td>
+<td>5/7 subset</td>
+<td>3.7</td>
+<td>5</td>
+<td>0/2</td>
+<td>0</td>
+</tr>
+<tr>
+<td><strong>D. PageProof (proposed), final</strong></td>
+<td><strong>14/19 (74%)</strong></td>
+<td>4.0</td>
+<td>6</td>
+<td><strong>0/3</strong></td>
+<td><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>D by type (final run): single 4/5, multi-page 2/4, unanswerable 3/3, superseded 2/4, injection 3/3.</li>
+<li>Red-team PDF (synthetic, disclosed, not in the headline): 6/6.</li>
+<li>Never over budget in any run.</li>
+<li>Two full D runs both scored 14/19 but missed different questions: an 8B model varies run to run.</li>
+<li>Average answer time about 52–60 s (range 25–160 s) on the RTX 5050.</li>
+</ul>
+<p><strong>Thresholds:</strong>
+- Grounding 0.8: every value from 0.5 to 0.8 kept all correctly quoted answers; 0.9 or verbatim-only blocked 1–2 more correct ones. So 0.8 is the strictest value with no loss.
+- Confidence 0.4: the model reported 0.95–1.0 on every answer, even wrong ones, so every threshold from 0 to 0.7 gave the same score (net 10). That's why the quote check, not confidence, does the real work.</p>
+<hr />
+<h2>5. Your 17 points, one by one</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Point</th>
+<th>What we did</th>
+<th>Say it (English)</th>
+<th>Tanglish</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Understand the problem</td>
+<td>Every hard rule enforced in code</td>
+<td>"Every rule is code: call 7 is refused, only 4 tools exist."</td>
+<td>Ovvoru rule-um code-la enforce pannirukom.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Markdown design</td>
+<td>1-page MEMO, README, deck content, Q&amp;A, runbook</td>
+<td>"The memo follows the rulebook's 3 headings; every number comes from our logs."</td>
+<td>Memo rulebook 3 headings-la; numbers ellam logs-la irundhu.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Dataset</td>
+<td>19 labelled questions, 3 real PDFs</td>
+<td>"Three real, very different PDFs, each question tagged with its evidence page."</td>
+<td>3 real PDFs, 19 questions, evidence page mark pannirukom.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Extra features</td>
+<td>Call meter, timeline, gate badges, injection banner, verified quotes, withheld guess, trace download, benchmark tab, multi-PDF</td>
+<td>"Every feature shows why an answer can be trusted."</td>
+<td>Ovvoru feature-um trust kaatradhukku.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>PPT: audience, wellness, business, scale-up</td>
+<td>Deck slides 2, 3, 9, 10, 12</td>
+<td>"Customer wellness means trust: a quote and a page, or an honest no."</td>
+<td>Wellness-na trust: quote + page, illa honest-a "theriyaadhu".</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Who uses it</td>
+<td>Compliance, legal, HR, support, SMEs, regulated / air-gapped orgs</td>
+<td>"People for whom a wrong answer is a liability and who can't use the cloud."</td>
+<td>Thappu answer problem aagura, cloud use panna mudiyaadha teams.</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Pain point (root cause)</td>
+<td>Root cause: no budget + no proof</td>
+<td>"We add both: a hard 6-call cap and a quote check."</td>
+<td>Root cause: budget illa, proof illa. Rendum add pannom.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Dataset fits problem</td>
+<td>Single 5, multi 4, superseded 4, unanswerable 3, injection 3</td>
+<td>"We tested every case type the judges named, before seeing their PDF."</td>
+<td>Judges sonna ella case-um test pannom.</td>
+</tr>
+<tr>
+<td>9</td>
+<td>No synthetic data</td>
+<td>Real PDFs only for headline; Northwind red-team PDF disclosed and separate</td>
+<td>"One labelled security test file, never mixed into the headline."</td>
+<td>Synthetic file headline score-la serkala.</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Requirements</td>
+<td>Fresh budget per question, no cache, failed calls count</td>
+<td>"A question can never go over budget; the code stops it."</td>
+<td>Budget thaanda mudiyaadhu.</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Which algorithm fits</td>
+<td>A ReAct, B search-first, C outline-first, D hybrid</td>
+<td>"D won 14/19 vs 12/19, and obeyed 0 injections vs 3."</td>
+<td>D jeichadhu; injection-ku yemaarala.</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Best accuracy</td>
+<td>D 74%, 0 over budget, red-team 6/6</td>
+<td>"74% on real PDFs, never over budget, and we show the misses."</td>
+<td>74%, budget thaandala, fail-um kaattrom.</td>
+</tr>
+<tr>
+<td>13</td>
+<td>Research papers</td>
+<td>7 papers incl. ReAct, Toolformer, SQuAD 2.0, Greshake (injection), Pan et al. IEEE TKDE 2024</td>
+<td>"Each paper maps to one design choice."</td>
+<td>Ovvoru paper-um oru design-ku base.</td>
+</tr>
+<tr>
+<td>14</td>
+<td>Business model</td>
+<td>Free, Team SaaS $15/user/mo, Enterprise on-prem, $0.02/question (illustrative)</td>
+<td>"The 6-call cap fixes worst-case cost per question."</td>
+<td>6-call limit-aala max cost fixed.</td>
+</tr>
+<tr>
+<td>15</td>
+<td>User-friendly, secure, centralised</td>
+<td>Chat + badges; fully local; one audit log</td>
+<td>"Nothing leaves the laptop; every call is in one trace."</td>
+<td>Ellam laptop-la; ella call-um oru trace-la.</td>
+</tr>
+<tr>
+<td>16</td>
+<td>Thresholds</td>
+<td>Grounding 0.8 decides; confidence 0.4 backstop</td>
+<td>"0.8 is the strictest value that loses no correct answer."</td>
+<td>0.8 data paathu choose pannom; quote check dhaan main.</td>
+</tr>
+<tr>
+<td>17</td>
+<td>Strategy and tools</td>
+<td>Strategy D + gates; Ollama qwen3:8b, PyMuPDF, Streamlit, own loop</td>
+<td>"Our own ~300-line harness, local model, no framework, no cloud."</td>
+<td>Sondha harness, local model; LangChain illa, cloud illa.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>6. 5-minute script (English)</h2>
+<p><strong>Important timing fact:</strong> one answer takes about 50 seconds. In 5 minutes you can show only <strong>2 live questions</strong>. Type the first one, then talk while it runs: the timeline fills live, which is the best visual you have.</p>
+<p>Use <strong>7 slides</strong>, not 12. Speaker 1 does the slides, Speaker 2 drives the laptop.</p>
+<table>
+<thead>
+<tr>
+<th>Time</th>
+<th>Slide / action</th>
+<th>What to say</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00–0:20</td>
+<td><strong>1. Title:</strong> PageProof</td>
+<td>"We're Team SOUL SOCIETY. PageProof answers questions on any PDF using only 4 tools, 6 calls, and only what the PDF proves. No RAG, no vector database, every answer comes with a quote."</td>
+</tr>
+<tr>
+<td>0:20–0:50</td>
+<td><strong>2. Problem &amp; users</strong></td>
+<td>"Compliance, legal and HR teams need answers from documents, but a wrong answer is a liability and they often can't send files to the cloud. Today's tools hallucinate and have no cost limit. The root cause is no budget and no proof. We add both."</td>
+</tr>
+<tr>
+<td>0:50–1:30</td>
+<td><strong>3. How it works</strong> (the flow diagram)</td>
+<td>"First turn: headings and keyword search together, two calls. Then up to three page reads, and one call kept in reserve to check for amendments. The 7th call is refused by code, not by the prompt. Every answer must quote a page it actually read, or it says 'insufficient information'. Text in the PDF is data, never commands."</td>
+</tr>
+<tr>
+<td>1:30–3:30</td>
+<td><strong>LIVE DEMO</strong></td>
+<td>Upload the judges' PDF: "Headings are detected even without a table of contents." Ask Q1, a multi-page or amended fact: "Watch the meter and timeline fill: each card is one tool call." When it answers: "Here is the ✅ verified quote and the page." Ask Q2, something not in the PDF: "It says insufficient information instead of guessing." Click <strong>Download trace</strong>: "Every call is logged; nothing hidden."</td>
+</tr>
+<tr>
+<td>3:30–4:10</td>
+<td><strong>4. Results</strong></td>
+<td>"We compared four strategies on 19 real questions. Plain ReAct got 63% and obeyed all 3 injection attacks. Ours got 74%, obeyed none, and never exceeded the budget."</td>
+</tr>
+<tr>
+<td>4:10–4:30</td>
+<td><strong>5. Thresholds &amp; safety</strong></td>
+<td>"The quote check at 0.8 is the strictest setting that loses no correct answer. Model confidence is always 0.95 or more, even when wrong, so we don't trust it alone."</td>
+</tr>
+<tr>
+<td>4:30–4:45</td>
+<td><strong>6. Business &amp; scale-up</strong></td>
+<td>"Fully local, so it fits regulated companies. The call cap fixes the cost per question. Next: OCR, SSO, SharePoint and Teams connectors."</td>
+</tr>
+<tr>
+<td>4:45–5:00</td>
+<td><strong>7. Honest limits + close</strong></td>
+<td>"Our weak spots are unmarked contradictions and long multi-part answers; they're in our memo with fixes. PageProof: answers only what the PDF proves. Thank you."</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Which 2 demo questions to ask:</strong> pick from the judges' PDF:
+1. Something that changes later in the document (e.g. a value that was "amended" or "updated"). Use words like "current" or "latest" in the question: our fingerprint then spends the reserve call hunting the amendment.
+2. Something clearly not in the document (e.g. "Who is the CEO?"), to show the safe decline.
+If the judges ask their own questions, just run them. If one is answered wrongly, say: "That's failure mode 1 in our memo," and show the trace.</p>
+<hr />
+<h2>7. 5-minute script (Tanglish)</h2>
+<table>
+<thead>
+<tr>
+<th>Time</th>
+<th>Slide / action</th>
+<th>Enna pesanum</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00–0:20</td>
+<td><strong>1. Title</strong></td>
+<td>"Naanga Team SOUL SOCIETY. PageProof edhavadhu PDF-la question kettaa, 4 tools, 6 calls-kulla, PDF-la proof irukkuradha mattum dhaan answer pannum. RAG illa, vector database illa. Ovvoru answer-kum quote irukkum."</td>
+</tr>
+<tr>
+<td>0:20–0:50</td>
+<td><strong>2. Problem &amp; users</strong></td>
+<td>"Compliance, legal, HR teams-ku document-la irundhu answer venum. Aana thappu answer-na periya problem, cloud-ku file anuppavum mudiyaadhu. Ippo irukkura AI tools poi solludhu, cost-ku limit illa. Root cause: budget illa, proof illa. Naama rendum add pannom."</td>
+</tr>
+<tr>
+<td>0:50–1:30</td>
+<td><strong>3. How it works</strong></td>
+<td>"Mudhal turn-la headings-um keyword search-um sethu 2 calls. Apram 3 pages varaikkum padikkum. Oru call amendment check panna reserve. 7th call-a prompt illa, code-e block pannum. Answer sonna padicha page-la irundhu quote kaatanum; illa-na 'insufficient information'. PDF-kulla irukkura text-a data-va mattum paakum, command-a illa."</td>
+</tr>
+<tr>
+<td>1:30–3:30</td>
+<td><strong>LIVE DEMO</strong></td>
+<td>Judges PDF upload: "Table of contents illa-naalum headings kandupidikkum." Q1 kelunga: "Meter-um timeline-um paarunga, ovvoru card-um oru tool call." Answer vandhadhum: "Idho verified quote, idho page number." Q2 (PDF-la illaadha question): "Guess pannaama 'insufficient information' nu solludhu." Download trace: "Ella call-um log aagirukku, edhuvum hide pannala."</td>
+</tr>
+<tr>
+<td>3:30–4:10</td>
+<td><strong>4. Results</strong></td>
+<td>"19 real questions-la 4 strategies compare pannom. Normal ReAct 63%, 3 injection attack-kum yemaandhudhu. Namma PageProof 74%, oru injection-kum yemaarala, budget-um thaandala."</td>
+</tr>
+<tr>
+<td>4:10–4:30</td>
+<td><strong>5. Thresholds</strong></td>
+<td>"Quote check 0.8: adhu dhaan oru correct answer-um miss aagaama irukkura strictest value. Model confidence eppovum 0.95 mela solludhu, thappa irundhaalum. Adhanaala adha mattum nambala."</td>
+</tr>
+<tr>
+<td>4:30–4:45</td>
+<td><strong>6. Business</strong></td>
+<td>"Fully local, adhanaala regulated companies-ku perfect. Call limit irukkaradhaala oru question-oda cost fixed. Next: OCR, SSO, SharePoint, Teams connectors."</td>
+</tr>
+<tr>
+<td>4:45–5:00</td>
+<td><strong>7. Limits + close</strong></td>
+<td>"Namma weak spots: mark pannaadha contradictions, romba pages varra multi-part answers. Memo-la fix-oda ezhudhirukkom. PageProof: PDF prove panradha mattum dhaan sollum. Thank you."</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>8. Judge Q&amp;A cheat sheet</h2>
+<table>
+<thead>
+<tr>
+<th>Likely question</th>
+<th>Short answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Isn't building headings at upload "pre-reading"?</td>
+<td>No. Building the heading list <em>is</em> how <code>list_headings</code> works. The LLM sees nothing until it calls a tool, and no page text is stored for later questions.</td>
+</tr>
+<tr>
+<td>How do you guarantee 6 calls?</td>
+<td>Code, not prompt. <code>BudgetedToolbox</code> counts every call (failed ones too) and refuses call 7 before it runs.</td>
+</tr>
+<tr>
+<td>How do you stop hallucination?</td>
+<td>Grounding gate: at least one quote must be on a page fetched for this question, checked by code. Otherwise "insufficient information".</td>
+</tr>
+<tr>
+<td>How do you handle prompt injection?</td>
+<td>Page text is wrapped in a random marker the PDF can't fake, and the system prompt says it is data only. Injections are reported, never obeyed. Plain ReAct obeyed 3/3; ours 0/3.</td>
+</tr>
+<tr>
+<td>How do you handle contradictions?</td>
+<td>The latest explicit amendment wins, and the agent spends its reserve call searching "amend"/"revised". Honest: 2/4 on our tests; it's failure mode 1 in the memo.</td>
+</tr>
+<tr>
+<td>Why these thresholds?</td>
+<td>Grounding 0.8 = strictest value with no lost correct answers (measured). Confidence 0.4 is a backstop; the model always says 0.95–1.0, so it barely matters.</td>
+</tr>
+<tr>
+<td>Why a local 8B model?</td>
+<td>Privacy (documents never leave the laptop), fixed cost, no API rate limits during the demo. Downside: slower, ~50 s per answer.</td>
+</tr>
+<tr>
+<td>Why not LangChain?</td>
+<td>Banned by rule 6, and a hand-written loop lets us control the budget exactly.</td>
+</tr>
+<tr>
+<td>What if the PDF is scanned?</td>
+<td>No OCR yet, so no text. The app warns about it. Fix: OCR inside <code>get_page</code>.</td>
+</tr>
+<tr>
+<td>Why 74% and not higher?</td>
+<td>An 8B model on a laptop, strict rules and honest scoring. We'd rather decline than guess, because guessing is penalised more.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>9. Honest limits and next fixes</h2>
+<ol>
+<li><strong>Unmarked contradictions.</strong> It answered the original Congress date, not the 20th-Amendment one, and 41.0 BLEU instead of 41.8. <em>Fix:</em> when a revision marker appears, spend the reserve call on "amendment" + topic.</li>
+<li><strong>Multi-part answers across 4+ pages</strong> don't fit in 6 calls. <em>Fix:</em> better planning of which pages to read first.</li>
+<li><strong>Confidence isn't calibrated, and the gate checks quotes, not claims.</strong> A real quote can sit beside an extra unsupported detail. <em>Fix:</em> check claim by claim.</li>
+<li><strong>Run-to-run variance and speed.</strong> Answers vary even at temperature 0; 25–160 s each. <em>Fix:</em> bigger GPU or a faster model.</li>
+<li><strong>No OCR</strong> for scanned PDFs; heading detection is a heuristic.</li>
+</ol>
+<p><strong>Tanglish:</strong> Namma weak points: (1) amendment mark pannaadha contradictions miss aagudhu, (2) 4+ pages venumna 6 calls podhaadhu, (3) confidence number nambaththakkadhu illa, (4) ovvoru run-um konjam maarum, 25–160 seconds aagum, (5) scanned PDF-ku OCR illa. Ellam memo-la fix-oda ezhudhirukkom. Idhu dhaan honesty points vaangum.</p></body></html>
