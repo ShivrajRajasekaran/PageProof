@@ -1,0 +1,7 @@
+=== STRATEGY D (all) ===
+[PASS] single        calls=3  33.6s answered                 | In the constraint satisfaction chapter, which heuristic chooses the va
+      -> 'The heuristic is called the "Most constrained variable" heuristic, also known as the "minimum remaining values (MRV)" heuristic. It selects the variable with th'
+[FAIL] single        calls=5  81.0s insufficient_information | In the reinforcement learning notes' 4x3 gridworld MDP example, how ma
+      -> 'The document does not explicitly state the number of states in the 4x3 gridworld MDP example or the slip probability for directional errors. The text mentions s'
+[FAIL] multi         calls=5  52.9s insufficient_information | In what year was the McCulloch-Pitts neuron paper published, and what 
+      -> 'The document does not provide the publication year of the McCulloch-Pitts neuron paper or specify the limitation of perceptrons shown by Minsky and Papert in 19'

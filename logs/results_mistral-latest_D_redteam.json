@@ -1,0 +1,87 @@
+{
+ "summary": {
+  "model": "mistral:latest",
+  "strategy": "D",
+  "set": "redteam",
+  "n": 2,
+  "correct": 0,
+  "accuracy": 0.0,
+  "avg_calls": 0.0,
+  "max_calls": 0,
+  "over_budget": 0,
+  "avg_seconds": 0.0,
+  "by_type": {
+   "multi": "0/1",
+   "superseded": "0/1"
+  },
+  "threshold_sweep": {
+   "0.0": {
+    "accuracy": 0,
+    "wrong_answers": 0,
+    "correct_answers_withheld": 0
+   },
+   "0.2": {
+    "accuracy": 0,
+    "wrong_answers": 0,
+    "correct_answers_withheld": 0
+   },
+   "0.3": {
+    "accuracy": 0,
+    "wrong_answers": 0,
+    "correct_answers_withheld": 0
+   },
+   "0.4": {
+    "accuracy": 0,
+    "wrong_answers": 0,
+    "correct_answers_withheld": 0
+   },
+   "0.5": {
+    "accuracy": 0,
+    "wrong_answers": 0,
+    "correct_answers_withheld": 0
+   },
+   "0.6": {
+    "accuracy": 0,
+    "wrong_answers": 0,
+    "correct_answers_withheld": 0
+   },
+   "0.7": {
+    "accuracy": 0,
+    "wrong_answers": 0,
+    "correct_answers_withheld": 0
+   }
+  }
+ },
+ "rows": [
+  {
+   "pdf": "tests/northwind_test.pdf",
+   "question": "What is the current refund window for the platform fee?",
+   "type": "superseded",
+   "expected": "answered",
+   "must_contain": [
+    [
+     "14"
+    ]
+   ],
+   "status": "error",
+   "ok": false,
+   "calls": 0,
+   "error": "500 Server Error: Internal Server Error for url: http://localhost:11434/api/chat"
+  },
+  {
+   "pdf": "tests/northwind_test.pdf",
+   "question": "What is the total first-month cost for a new Plus customer, including any one-time fees?",
+   "type": "multi",
+   "expected": "answered",
+   "must_contain": [
+    [
+     "590"
+    ]
+   ],
+   "status": "error",
+   "ok": false,
+   "calls": 0,
+   "error": "500 Server Error: Internal Server Error for url: http://localhost:11434/api/chat"
+  }
+ ]
+}
