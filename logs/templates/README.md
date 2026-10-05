@@ -71,6 +71,8 @@ Open the URL Streamlit prints, upload a PDF in the sidebar and ask a question. T
 - Turn 1 calls `list_headings` and `search_keyword` in parallel, so the agent gets both a map and coordinates.
 - It then reads at most 3 pages and keeps 1 call in reserve for a contradiction or a page continuation.
 - **Decline check:** if it tries to decline while budget and unread search hits remain, the harness pushes back once and lists those pages.
+- **Question fingerprinting:** before any tool call, a zero-cost regex classifier labels the question (comparison / may-have-changed / multi-part / definition / specific-fact) and adds the matching navigation route to the prompt. No LLM or tool call is spent. Measured effect: injection-style questions 1/3 → 3/3; headline accuracy unchanged at 14/19.
+- **Grounding check:** if the first answer's quotes match no page read in this question, the harness pushes back once ("go and read") before converting it to a decline.
 - Finally it answers through both gates.
 
 ---

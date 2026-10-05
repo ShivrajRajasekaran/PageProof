@@ -71,6 +71,8 @@ Open the URL Streamlit prints, upload a PDF in the sidebar and ask a question. T
 - Turn 1 calls `list_headings` and `search_keyword` in parallel, so the agent gets both a map and coordinates.
 - It then reads at most 3 pages and keeps 1 call in reserve for a contradiction or a page continuation.
 - **Decline check:** if it tries to decline while budget and unread search hits remain, the harness pushes back once and lists those pages.
+- **Question fingerprinting:** before any tool call, a zero-cost regex classifier labels the question (comparison / may-have-changed / multi-part / definition / specific-fact) and adds the matching navigation route to the prompt. No LLM or tool call is spent. Measured effect: injection-style questions 1/3 → 3/3; headline accuracy unchanged at 14/19.
+- **Grounding check:** if the first answer's quotes match no page read in this question, the harness pushes back once ("go and read") before converting it to a decline.
 - Finally it answers through both gates.
 
 ---
@@ -132,6 +134,7 @@ Model: `qwen3:8b` via Ollama on an RTX 5050 laptop (8 GB VRAM). Dataset: 19 hand
 | B | 5/7 (71%) | 3.9 | 5 | n/a | 2/2 | 0/2 | 0 | 0 | 48 s |
 | C | 5/7 (71%) | 3.7 | 5 | n/a | 2/2 | 0/2 | 0 | 0 | 78 s |
 | D | 14/19 (74%) | 4.2 | 6 | 3/3 | 1/3 (+ red-team 1/1) | 0/3 | 2 | 0 | 60 s |
+| D final (all fixes + question fingerprinting) | 14/19 (74%) | 4.0 | 6 | 3/3 | 3/3 | 0/3 | 0 | 0 | 52 s |
 | D on the same 7-question subset as B/C | 5/7 | | | | | | | | |
 | D, final code (stronger 'never skip tools' re-prompt), injection questions only | 2/3 | | | | | 0/3 | | | |
 

@@ -86,6 +86,25 @@ DOC_TOOLS = {
 FINAL_TOOL = tool_schema("final_answer", "Submit the final answer. Call exactly once, when done or out of budget.", FINAL_PROPS, FINAL_REQUIRED)
 
 
+# Question fingerprinting: a zero-cost (no tool call, no LLM call) classifier that picks a navigation route per question type.
+FINGERPRINTS = [
+    ("comparison", re.compile(r"\b(differ|difference|compare|comparison|versus|vs\.?|contrast)\b|\bbetween\b.+\band\b", re.I),
+     "COMPARISON: search each concept separately and read one page for each before comparing."),
+    ("may-have-changed", re.compile(r"\b(current|currently|now|latest|still|updated?|amend\w*|revis\w*|changed?|effective|today)\b", re.I),
+     "RULE/VALUE THAT MAY HAVE CHANGED: after finding it, spend the reserve call searching 'amend' / 'revised' / the topic + "
+     "'amendment', and answer with the latest statement."),
+    ("multi-part", re.compile(r"\?.*\?|,\s*and\s+(what|how|which|who|when|why)\b|\band\s+(what|how|which|who|when|why)\b", re.I),
+     "MULTI-PART: identify one evidence target per part; search a distinctive term for each and read one page per part."),
+    ("definition", re.compile(r"^\s*(what\s+(is|are)\s+(a|an|the)?\s*\w+(\s+\w+)?\s*\??$|define\b|what does .+ (mean|stand for))", re.I),
+     "DEFINITION: the outline usually names the defining section; read that page first."),
+]
+
+
+def fingerprint(question: str) -> list[tuple[str, str]]:
+    hits = [(name, hint) for name, rx, hint in FINGERPRINTS if rx.search(question)]
+    return hits or [("specific-fact", "SPECIFIC FACT: search the most distinctive term (name, number, noun) and read the best hit; stop early once a quote supports it.")]
+
+
 @dataclass
 class AgentResult:
     question: str
@@ -100,6 +119,7 @@ class AgentResult:
     raw_status: str = ""  # model's status before harness gates (for threshold analysis)
     seconds: float = 0.0
     llm_turns: int = 0
+    fingerprint: list[str] = field(default_factory=list)
 
 
 def _fmt_doc_info(store: DocStore) -> str:
@@ -185,7 +205,12 @@ class DocAgent:
         box = BudgetedToolbox(self.tools, TOOL_BUDGET, self.log_path, question)
         emit = on_event or (lambda *_: None)
         llm_calls_before = self.llm.calls
-        msgs: list[dict] = [{"role": "system", "content": self._system()}]
+        fp = fingerprint(question) if self.strategy == "D" else []
+        system = self._system()
+        if fp:
+            system += "\n\nQUESTION FINGERPRINT (computed by the harness, no tool call):\n" + "\n".join(f"- {h}" for _, h in fp)
+            box.note("fingerprint", {"types": [n for n, _ in fp]})
+        msgs: list[dict] = [{"role": "system", "content": system}]
         for q, a in (history or [])[-4:]:
             msgs += [{"role": "user", "content": q}, {"role": "assistant", "content": a}]
         msgs.append({"role": "user", "content": question})
@@ -276,6 +301,7 @@ class DocAgent:
                                   "evidence": res.evidence, "notes": res.notes, "tool_calls_used": box.used})
         res.seconds = round(time.time() - t0, 1)
         res.llm_turns = self.llm.calls - llm_calls_before
+        res.fingerprint = [n for n, _ in fp]
         return res
 
     def _finalize(self, question: str, fa: dict | None, box: BudgetedToolbox) -> AgentResult:
@@ -298,7 +324,7 @@ class DocAgent:
                 except (TypeError, ValueError):
                     evidence.append({"page": 0, "quote": str(e.get("quote", ""))})
         inj = str(fa.get("ignored_embedded_instruction") or "").strip()
-        if inj and inj.lower() not in ("none", "n/a", "empty", "null"):
+        if inj and not re.match(r"^\W*(none|no\b|n/?a\b|null|empty|nothing|not\b|-)", inj.lower()):  # "None detected" etc. = no injection
             notes.append(f"Ignored embedded instruction: {inj}")
         read_pages = list(box.pages_read.values())
         for e in evidence:

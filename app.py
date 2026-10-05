@@ -87,6 +87,8 @@ def meter_html(trace, final_done=False):
 
 def step_html(e):
     if e["status"] == "info":
+        if e["tool"] == "fingerprint":
+            return f'<div class="pp-step info">🧬 Question fingerprint → route: <b>{html.escape(", ".join(e["result"]["types"]))}</b> (no tool call)</div>'
         label = {"decline_check": "🔁 Decline check: premature 'insufficient' pushed back once",
                  "grounding_check": "🔁 Grounding check: unverified quotes pushed back once",
                  "dropped_call": "⏭️ Call issued with final answer: dropped, not executed",
@@ -115,6 +117,8 @@ def gates_html(r):
         g = ('<span class="pp-gate fail">✗ grounding gate</span>' if "grounding gate" in notes else
              '<span class="pp-gate fail">✗ confidence threshold</span>' if "threshold" in notes else
              '<span class="pp-gate na">declined by agent</span>')
+    if r.get("fingerprint"):
+        g = f'<span class="pp-gate na">🧬 {html.escape(", ".join(r["fingerprint"]))}</span>' + g
     g += f'<span class="pp-gate na">{r["used"]}/{TOOL_BUDGET} tool calls · {r["seconds"]}s</span>'
     return f'<div class="pp-gates">{g}</div>'
 
@@ -155,10 +159,20 @@ def benchmark_tab():
             sm = json.load(open(f, encoding="utf-8"))["summary"]
         except Exception:  # noqa: BLE001
             continue
-        rows.append({"model": sm["model"], "strategy": STRAT_NAMES.get(sm["strategy"], sm["strategy"]), "set": sm["set"],
+        if f.endswith("_final.json"):
+            qset = "real · all 19 · FINAL code (fingerprinting + all fixes)"
+        elif "injfix" in f:
+            qset = "real · injection Qs only, re-check with final code"
+        elif sm["set"] == "redteam":
+            qset = "red-team fixture (synthetic, not headline)"
+        elif sm["n"] < 19:
+            qset = f"real · {sm['n']}-question subset (every 3rd)"
+        else:
+            qset = "real · all 19 questions"
+        rows.append({"model": sm["model"], "strategy": STRAT_NAMES.get(sm["strategy"], sm["strategy"]), "question set": qset,
                      "accuracy": f"{sm['correct']}/{sm['n']} ({sm['accuracy'] * 100:.0f}%)", "avg calls": sm["avg_calls"],
                      "max calls": sm["max_calls"], "over budget": sm["over_budget"], "avg s": sm["avg_seconds"]})
-    st.subheader("Existing vs proposed strategies (same model, same questions)")
+    st.subheader("Existing vs proposed strategies (same local model, real PDFs)")
     st.dataframe(rows, width="stretch", hide_index=True)
     if os.path.exists("logs/RESULTS.md"):
         with st.expander("Full report: per-type results, threshold sweep, failures"):
@@ -237,7 +251,7 @@ if q:
                 r = agent.ask(q, history=st.session_state.history, on_event=on_event)
                 live.update(label=f"Done · {r.tool_calls_used}/{TOOL_BUDGET} tool calls · {r.seconds}s", state="complete", expanded=False)
                 res = dict(status=r.status, answer=r.answer, confidence=r.confidence, evidence=r.evidence, used=r.tool_calls_used,
-                           trace=r.trace, notes=r.notes, tentative=r.tentative_answer, seconds=r.seconds)
+                           trace=r.trace, notes=r.notes, tentative=r.tentative_answer, seconds=r.seconds, fingerprint=r.fingerprint)
                 st.session_state.chat.append({"role": "assistant", "content": res})
                 st.session_state.history.append((q, r.answer))
                 ok = True

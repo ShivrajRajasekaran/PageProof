@@ -128,6 +128,20 @@ We didn't just build one agent. We tested three established strategies against o
 
 ---
 
+### Backup slide (after slide 6): "How PageProof decides" (the agent policy)
+
+- **Evidence budgeting:** 2 calls locate, ≤ 3 read, 1 in reserve. It stops early when the evidence is verified (often 3/6 calls).
+- **Negative-evidence check:** "not in the document" must be earned. A decline is refused while unread search hits and budget remain.
+- **Vocabulary discovery:** it retries with the document's own wording, with lexical partial-word fallback (finds "Peppert" for "Papert").
+- **Two-stage gate:** quote found on a page read (0.8) **and** confidence ≥ 0.4, with one push-back to go and read before declining.
+- **🧬 Question fingerprinting (new):** a zero-cost classifier routes each question: comparison means search both concepts, may-have-changed means hunt for the amendment, multi-part means one target per part. It costs no tool calls. Measured: injection questions went from 1/3 to 3/3 answered correctly; headline accuracy stayed 14/19.
+- **Measured honestly:** two full runs of D both scored 14/19 but missed different questions, so multi-page and contradiction answers vary run to run on an 8B model.
+- **Next:** an evidence-collision resolver for unmarked contradictions (the Congress meeting-day question has no temporal cue, so fingerprinting cannot route it).
+
+**Speaker notes:** "The four tools are fixed for everyone. Our innovation is how the agent decides what to ask them and when to stop, and that the harness, not the model, enforces each of those decisions."
+
+---
+
 ## Slide 7 — Our Thresholds and Why We Chose Them (Data, Not Guesswork)
 
 PageProof decides **answer vs "insufficient information"** with two thresholds. We picked both values from our own logged traces.

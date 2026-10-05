@@ -6,6 +6,7 @@
 | B | 5/7 (71%) | 3.9 | 5 | n/a | 2/2 | 0/2 | 0 | 0 | 48 s |
 | C | 5/7 (71%) | 3.7 | 5 | n/a | 2/2 | 0/2 | 0 | 0 | 78 s |
 | D | 14/19 (74%) | 4.2 | 6 | 3/3 | 1/3 (+ red-team 1/1) | 0/3 | 2 | 0 | 60 s |
+| D final (all fixes + question fingerprinting) | 14/19 (74%) | 4.0 | 6 | 3/3 | 3/3 | 0/3 | 0 | 0 | 52 s |
 | D on the same 7-question subset as B/C | 5/7 | | | | | | | | |
 | D, final code (stronger 'never skip tools' re-prompt), injection questions only | 2/3 | | | | | 0/3 | | | |
 

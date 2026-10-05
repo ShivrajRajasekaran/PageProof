@@ -11,7 +11,7 @@
 | 1 | **Close heavy apps**: the benchmark run, Chrome tabs, Docker, Teams, game launchers, extra VS Code windows. The Windows commit limit on this laptop is tight. | Task Manager → Performance → Memory → "Committed" has plenty of headroom |
 | 2 | Plug in the charger. Set power mode to Best performance and turn off sleep. | GPU isn't throttled on battery |
 | 3 | Start the **Ollama app** (Start menu). Wait for the tray icon. | `ollama list` shows `qwen3:8b` |
-| 4 | In PowerShell, from the project folder (logs are written relative to the working directory): `cd C:\Users\shivraj\Desktop\RAPIDWINNER` then `$env:OLLAMA_MODEL="qwen3:8b"; $env:CONF_THRESHOLD="0.4"; $env:STRATEGY="D"` then `streamlit run app.py` | Browser opens the PageProof page |
+| 4 | From the project folder (logs are written relative to the working directory), run `cd C:\Users\shivraj\Desktop\RAPIDWINNER`. Then set the variables in the syntax for **your** terminal. **PowerShell** (prompt starts `PS C:\...`): `$env:OLLAMA_MODEL="qwen3:8b"; $env:CONF_THRESHOLD="0.4"; $env:STRATEGY="D"`. **Command Prompt / cmd** (prompt is just `C:\...>`): `set OLLAMA_MODEL=qwen3:8b` then `set CONF_THRESHOLD=0.4` then `set STRATEGY=D` (no quotes, no spaces around `=`). Then `python -m streamlit run app.py` in either terminal. **If Streamlit was already running from earlier, stop it (Ctrl+C) and start it again**, otherwise it serves old code: the Benchmark tab would be missing the FINAL-code row and the 🧬 fingerprint badge. Running the PowerShell line in cmd gives "The filename, directory name, or volume label syntax is incorrect". | Browser opens the PageProof page |
 | 5 | **Warm the model through the app**, not with `ollama run`, which may load a different context size and reload later. Upload `tests\northwind_test.pdf` and ask *"Is the onboarding fee refundable?"* | Answered, ✅ quote, about 30 s. `ollama ps` shows qwen3:8b on GPU |
 | 6 | **Reset the session**: press F5 in the browser. Otherwise the warm-up PDF stays loaded, the app enters multi-document mode, and every question spends a `list_documents` call. | Sidebar shows "Upload a PDF…" |
 | 7 | Sidebar: strategy **D · PageProof hybrid (proposed)**, caption shows threshold 0.4 | |
@@ -88,3 +88,7 @@ Open **Detected headings** in the sidebar and Ctrl+F the PDF in a viewer to pick
 | "Outline: 0 headings (none)" but text exists | No outline and no font signal | Fine. Turn 1 automatically offers only `search_keyword`, so no call is wasted. |
 | Outline ends with "[outline truncated …]" | More than 300 headings | That's by design, to keep it inside the 16k context. The agent uses search for the rest. |
 | Search seems slow on a huge PDF | Pages are re-scanned on every search (no cache) | "That's the price of no caching: about 0.3 s per 200 pages per search." |
+
+
+## What the 🧬 badge means (if a judge asks)
+Before any tool call, the harness classifies the question with a regex (no LLM call, no tool call): *comparison*, *may-have-changed*, *multi-part*, *definition* or *specific-fact*. The route is added to the prompt and the label is shown next to the answer. It is deliberately simple; it can misfire ("Q-learning **update** rule" is tagged may-have-changed because of the word "update"), which only makes the agent also check for amendments. It never costs a tool call.
