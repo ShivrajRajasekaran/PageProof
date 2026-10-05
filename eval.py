@@ -39,14 +39,17 @@ ap.add_argument("set", nargs="?", default="all")
 ap.add_argument("--strategy", default="D")
 ap.add_argument("--model", default=os.environ.get("OLLAMA_MODEL", "qwen3:8b"))
 ap.add_argument("--limit", type=int, default=0)
+ap.add_argument("--every", type=int, default=1, help="use every k-th question (evenly spread subset)")
+ap.add_argument("--type", default="", help="only questions whose type starts with this")
+ap.add_argument("--tag", default="", help="suffix for output files")
 args = ap.parse_args()
 
 sets = ["real", "redteam"] if args.set == "all" else [args.set]
 os.makedirs("logs", exist_ok=True)
 for sname in sets:
-    qs = load_set(sname)[: args.limit or None]
+    qs = [q for q in load_set(sname) if q["type"].startswith(args.type)][:: args.every][: args.limit or None]
     stores, rows = {}, []
-    tag = f"{args.model.replace(':', '-')}_{args.strategy}_{sname}"
+    tag = f"{args.model.replace(':', '-')}_{args.strategy}_{sname}{args.tag}"
     for q in qs:
         if q["pdf"] not in stores:
             st = DocStore(); st.add_pdf(q["pdf"]); stores[q["pdf"]] = st

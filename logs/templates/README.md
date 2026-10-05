@@ -125,32 +125,11 @@ python eval.py all --strategy D            # usage: eval.py [real|redteam|all] [
 
 ## Results
 
-Model: `qwen3:8b` via Ollama on an RTX 5050 laptop (8 GB VRAM). Dataset: 19 hand-labelled questions on real PDFs. The injection fixture is reported separately.
+Model: `qwen3:8b` via Ollama on an RTX 5050 laptop (8 GB VRAM). Dataset: {{N_QUESTIONS}} hand-labelled questions on real PDFs. The injection fixture is reported separately.
 
-|---|---|---|---|---|---|---|---|---|---|
-| A | 12/19 (63%) | 3.7 | 6 | 3/3 | 1/3 | 3/3 | 0 | 0 | 54 s |
-| B | 5/7 (71%) | 3.9 | 5 | n/a | 2/2 | 0/2 | 0 | 0 | 48 s |
-| C | 5/7 (71%) | 3.7 | 5 | n/a | 2/2 | 0/2 | 0 | 0 | 78 s |
-| D | 14/19 (74%) | 4.2 | 6 | 3/3 | 1/3 (+ red-team 1/1) | 0/3 | 2 | 0 | 60 s |
-| D on the same 7-question subset as B/C | 5/7 | | | | | | | | |
-| D, final code (stronger 'never skip tools' re-prompt), injection questions only | 2/3 | | | | | 0/3 | | | |
+{{STRATEGY_TABLE}}
 
-*Real PDFs: course reader, US Constitution, 'Attention Is All You Need'. B and C were run on an evenly spread subset (every 3rd question) for time.*
-
-Threshold sweep (strategy D): 
-
-| Threshold | Correct answers kept | Wrong answers let through | Correct declines | Net score |
-|---|---|---|---|---|
-| 0.0 | 11 | 2 | 3 | 10 |
-| 0.2 | 11 | 2 | 3 | 10 |
-| 0.3 | 11 | 2 | 3 | 10 |
-| 0.4 | 11 | 2 | 3 | 10 |
-| 0.5 | 11 | 2 | 3 | 10 |
-| 0.6 | 11 | 2 | 3 | 10 |
-| 0.7 | 11 | 2 | 3 | 10 |
-
-Confidences reported on answered questions: [0.95, 0.95, 0.95, 0.95, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-
+Threshold sweep (strategy D): {{THRESHOLD_SWEEP_TABLE}}
 
 ---
 

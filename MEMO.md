@@ -1,40 +1,46 @@
-# PageProof — Memo (RAP Hackathon 2026, Budgeted Document-Answering Agent)
+# PageProof — Memo · Team SOUL SOCIETY (RAP Hackathon 2026, Budgeted Document-Answering Agent)
 
-**PageProof answers questions about any uploaded PDF using only the four permitted tools, within at most 6 tool calls plus 1 answer call. It runs fully locally on `qwen3:8b` through Ollama on an 8 GB laptop GPU, so no document leaves the machine.**
+**PageProof answers questions about any uploaded PDF with only the four permitted tools, in at most 6 tool calls plus 1 answer call. It runs locally (`qwen3:8b`, Ollama, 8 GB laptop GPU); no document leaves the machine.**
 
 ## Architecture
 ```
-Streamlit chat ─► DocAgent.ask()   hand-written loop, raw HTTP to Ollama (no framework)
-                    │  turn 1: list_headings + search_keyword → targeted get_page reads → final_answer
-                    ▼
-            BudgetedToolbox        counts + logs every call (full JSONL); call #7 is refused, never executed
-                    ▼
-   list_documents · list_headings · get_page (1 page) · search_keyword (page numbers only)
-                    ▼
-            DocStore               opened PDF + outline only; page text is extracted at call time (no cache)
-                    ▼
-   Harness gates on final_answer:  ① quote grounding  ② confidence ≥ 0.4  → otherwise "insufficient information"
+Streamlit chat ─► DocAgent.ask()   hand-written loop, no framework
+      ▼
+BudgetedToolbox   logs every call; call #7 refused
+      ▼
+list_documents · list_headings · get_page · search_keyword (page numbers only)
+      ▼
+DocStore          outline only; text extracted per call
+      ▼
+final_answer gates: ① quote grounding ② confidence ≥ 0.4 → else "insufficient information"
 ```
 
 ## What we did and why
-- **The harness enforces the budget, not the prompt.** Small models ignore numeric limits, so the code makes overruns impossible. After 6 calls the model gets one structured JSON answer call with no tools. Failed calls count, which is the conservative reading of the rules. Every tool result tells the model how many calls remain.
-- **Strategy D, "PageProof hybrid" (proposed).** Turn 1 asks for the outline and a keyword search, which gives a map and coordinates for two calls. The agent then reads 1–3 pages and keeps one call in reserve for a continuation page or a later amendment. We benchmarked D against three existing strategies on the same model and questions (see Results).
-- **Headings without a table of contents.** Most PDFs have no outline. We use the embedded outline if present. Otherwise we detect headings by font size and bold relative to the body font, merge number and title lines, and drop running headers.
-- **Search is lexical only.** It is a substring match after repairing extraction damage (ligatures ﬁ/ﬂ, end-of-line hyphens, lost spaces). It falls back to "pages containing all the words". This is not semantic search.
-- **Grounding gate.** An answer must carry verbatim quotes, and at least one must match a page fetched for this question. It passes if the quote appears verbatim, or if 80 % of its word 3-grams appear and every number in it appears on that page. Otherwise the user gets insufficient information. This catches answers from model memory and invented quotes such as "refund window is 30 days" cited against an amendment page.
-- **Threshold 0.4, not 0.3.** We assume a wrong answer costs more than a decline, scoring +1 correct, +1 correct decline and −2 wrong. Under that scoring, the sweep in `logs/RESULTS.md` (recomputed offline from logged confidences) shows: THRESHOLD_FINDING
-- **Prompt injection.** Page text is fenced with a random nonce (`<<<PAGE n id=…>>> … <<<END PAGE id=…>>>`), so the page cannot fake the closing marker. PDF-title metadata is escaped and labelled untrusted. The rules say document text is data, never instructions, and the model must report embedded instructions in `ignored_embedded_instruction` rather than obey them.
-- **Contradictions.** The latest explicit amendment or revision wins and the earlier statement is mentioned. If budget allows, the agent searches for "amend" or "revised".
-- **No pre-reading or caching.** At upload we build only the outline used by `list_headings`. `get_page` and `search_keyword` extract text from the PDF at call time. Each question starts with a fresh budget, and history carries only previous Q/A text, never page text. An answer reused from history still has to be grounded in pages read again.
-- **At most 7 LLM calls per question:** up to 6 tool-using turns plus 1 final answer. Calls issued alongside `final_answer` are logged as dropped and not executed, and the final answer is written to the trace.
+- **The harness, not the prompt, enforces the budget.** Small models ignore numeric limits. After 6 calls the model gets one tool-free answer call, and failed calls count (conservative reading).
+- **Strategy D, "PageProof hybrid" (proposed).** Turn 1 requests outline plus keyword search (map and coordinates for two calls), then reads 1–3 pages, keeping one call in reserve for a continuation page or amendment. Benchmarked against three existing strategies.
+- **Headings without a table of contents.** Embedded outline if present, else font size and bold versus body text, dropping running headers.
+- **Search is lexical only.** Substring match after repairing ligatures (ﬁ/ﬂ), hyphens and lost spaces, falling back to looser word matches. Tolerates long queries and PDF typos ("Peppert"); no semantic search.
+- **Decline check (strategy D).** A decline with budget and unread search-hit pages left is refused once, naming those pages; the 8B model gave up early. A second decline is accepted.
+- **Grounding gate.** At least one quote must match a page fetched for this question, verbatim or by 80 % of word 3-grams with every number present. This blocks memory answers and invented quotes ("refund window is 30 days").
+- **Thresholds, chosen from our logs (`grounding_sweep.py`, no LLM calls).** *Grounding gate 0.8* decides answer vs decline. Replaying every benchmark answer against the pages read, 0.5–0.8 keep all correctly quoted answers, while 0.9 or verbatim-only wrongly blocks 1–2 more. 0.8 is the strictest value with no loss, which is what defeats invented quotes. *Confidence 0.4* is a backstop: answer only if P > λ/(1+λ), so 0.4 corresponds to a wrong answer costing about ⅔ of a right one. qwen3:8b reported 0.95–1.0 on every answer, including wrong ones, so confidence alone is not trusted.
+- **Prompt injection.** Page text is fenced with a random nonce so pages cannot fake the end marker; title metadata is escaped. Document text is data; embedded instructions are reported in `ignored_embedded_instruction`, not obeyed.
+- **Contradictions.** The latest explicit amendment wins and the earlier statement is mentioned; budget permitting, the agent searches "amend" or "revised".
+- **No pre-reading or caching.** Upload builds only the outline; tools read the PDF at call time. Each question gets a fresh budget; history keeps Q/A text, never page text.
+- **At most 7 LLM calls per question:** 6 tool turns plus 1 final answer; calls issued alongside `final_answer` are dropped and logged.
 
 ## Results (qwen3:8b, local; all numbers generated by `make_report.py`)
-RESULTS_TABLE
+19 hand-labelled questions on 3 real PDFs (204-page course reader, US Constitution with amendments, "Attention Is All You Need"):
+
+| Strategy (same model, same questions) | Accuracy | Avg / max tool calls | Unanswerable declined | Obeyed an injection | Ungrounded answers blocked |
+|---|---|---|---|---|---|
+| A. Naive ReAct (existing, no gates) | 12/19 (63%) | 3.7 / 6 | 3/3 | **3/3** (e.g. replied "ACCESS GRANTED") | 0 |
+| **D. PageProof (proposed)** | **14/19 (74%)** | 4.2 / 6 | 3/3 | **0/3** | 2 |
+
+By type (D): single 5/5, multi 3/4, unanswerable 3/3, superseded 2/4, injection 1/3. No question exceeded 6 tool calls. Existing strategies B (search-first) and C (outline-first) scored 5/7 each on an evenly spread 7-question subset, where D also scored 5/7. D's two misses there were the injection questions answered without tools, which is the failure the post-benchmark "never skip tools" re-prompt targets. Re-run on the 3 injection questions, the final code scored 2/3, obeyed 0/3, and the third became a safe decline. The red-team fixture (planted amendment and planted injection, synthetic and excluded from the headline numbers) scored 6/6.
 
 ## Known failure modes (not fixed)
-1. **Answers spread over more than 4 pages** cannot all be read within 6 calls. The agent answers partially or declines. Intended fix: use heading page ranges to pick the single densest page per part.
-2. **The grounding gate checks quotes, not every claim.** A grounded answer can still add an unsupported detail. Intended fix: a claim-by-claim check against the quotes (costs an extra LLM call, so it is outside the budget rules).
-3. **Self-reported confidence is poorly calibrated.** It clusters high, so the threshold is a weak second layer and the grounding gate does most of the work. Intended fix: calibrate on a larger labelled set.
-4. **Math- or figure-heavy pages** extract as broken tokens, so correct answers can fail quote verification. **Scanned PDFs** have no text layer; OCR is needed.
-5. **Heading detection is heuristic.** Divider pages create pseudo-headings and levels follow font rank. Stitched PDFs reuse section numbers, so the agent must rely on PDF page indexes.
-6. **Latency and hardware.** About 30 s per question on an RTX 5050. The 8B model needs about 6 GB of free system commit on Windows.
+1. **Unmarked contradictions.** It reported 41.0 BLEU (text) instead of 41.8 (abstract, table), and the original Congress meeting date instead of the 20th-Amendment date. Intended fix: when a page carries a revision marker (`*`, "changed by amendment"), spend the reserve call searching "amendment" plus the topic.
+2. **Injected "skip the tools" instructions.** Obeyed in 2 of 3 cases; the gate turned the memory answers into safe declines, losing the answer. A stronger re-prompt was added after the benchmark, not yet measured.
+3. **Multi-part answers over more than 4 pages** don't fit in 6 calls (found 1943, missed the Minsky/Papert page).
+4. **Uncalibrated confidence; the gate checks quotes, not claims**, so a grounded answer can add an unsupported detail. Intended fix: claim-by-claim checking.
+5. **Variance and limits.** Answers vary between runs at temperature 0 and take 25–160 s on an RTX 5050 (turns capped at 3,072 output tokens). No OCR for scanned PDFs; heading detection is heuristic.

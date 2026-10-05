@@ -117,17 +117,9 @@ The model can only touch the document through four tools, and the budget wrapper
   - Both checks are one-time push-backs, and both appear as steps in the UI timeline and the trace.
   - Every answer then passes the grounding gate and the 0.4 threshold.
 
-|---|---|---|---|---|---|---|---|---|---|
-| A | 12/19 (63%) | 3.7 | 6 | 3/3 | 1/3 | 3/3 | 0 | 0 | 54 s |
-| B | 5/7 (71%) | 3.9 | 5 | n/a | 2/2 | 0/2 | 0 | 0 | 48 s |
-| C | 5/7 (71%) | 3.7 | 5 | n/a | 2/2 | 0/2 | 0 | 0 | 78 s |
-| D | 14/19 (74%) | 4.2 | 6 | 3/3 | 1/3 (+ red-team 1/1) | 0/3 | 2 | 0 | 60 s |
-| D on the same 7-question subset as B/C | 5/7 | | | | | | | | |
-| D, final code (stronger 'never skip tools' re-prompt), injection questions only | 2/3 | | | | | 0/3 | | | |
+{{STRATEGY_TABLE}}
 
-*Real PDFs: course reader, US Constitution, 'Attention Is All You Need'. B and C were run on an evenly spread subset (every 3rd question) for time.*
-
-*Model: qwen3:8b on Ollama. Dataset: 19 hand-labelled questions on real PDFs (single-page, multi-page, superseded, unanswerable). Injection is scored separately on a disclosed red-team fixture.*
+*Model: qwen3:8b on Ollama. Dataset: {{N_QUESTIONS}} hand-labelled questions on real PDFs (single-page, multi-page, superseded, unanswerable). Injection is scored separately on a disclosed red-team fixture.*
 
 **Visual:** Grouped bar chart of accuracy per strategy, with D highlighted. Put the table underneath.
 
@@ -143,16 +135,9 @@ PageProof decides **answer vs "insufficient information"** with two thresholds. 
 **1. Grounding gate = 0.8 (the decisive one).** At least one quote must appear verbatim on a page the agent read in this question, *or* ≥ 80% of its word 3-grams must match with every number present.
 - **Why not higher (0.9 / 1.0 verbatim)?** It blocks correct answers whose quotes differ slightly from the page (match scores 0.85 and 0.96 in our runs). Verbatim-only loses 2 more correct answers.
 - **Why not lower (0.5–0.7)?** It gains nothing (identical results on our data) and makes invented quotes easier to pass. 0.8 is the strictest value that keeps every correctly quoted answer.
-- **Effect:** blocked 2 answers the model wrote from memory, including one where the document told it to "skip the tools".
+- **Effect:** blocked {{D_BLOCKED}} answers the model wrote from memory, including one where the document told it to "skip the tools".
 
-| 3-gram threshold | Correct answers accepted | Correct answers wrongly blocked | Wrong answers accepted | Wrong answers blocked |
-|---|---|---|---|---|
-| 0.5 | 15 | 1 | 2 | 1 |
-| 0.6 | 15 | 1 | 2 | 1 |
-| 0.7 | 15 | 1 | 2 | 1 |
-| 0.8 | 15 | 1 | 2 | 1 |
-| 0.9 | 14 | 2 | 2 | 1 |
-| 1.0 | 13 | 3 | 2 | 1 |
+{{GROUNDING_SWEEP_TABLE}}
 
 **2. Confidence = 0.4 (backstop).** Answer only if P(correct) > λ/(1+λ). 0.4 corresponds to a wrong answer costing about ⅔ of a right one. We measured that qwen3:8b reports 0.95–1.0 on *every* answer, including wrong ones, so this threshold rarely fires. That is exactly why we don't rely on confidence alone.
 
@@ -201,7 +186,7 @@ These features all serve the same goal: the user can see why to trust an answer.
 - **SaaS tiers** plus **Enterprise on-prem**, and **pay-per-question** for occasional users.
 - **Predictable unit cost.** Every answer is capped at **6 tool calls + 1 answer call**, so the worst-case cost per question is known in advance.
 - **Local inference means near-zero marginal cost.** One consumer GPU serves a team, with no per-token API bill.
-- **Measured:** average 4.0 tool calls and 52 s per question on an RTX 5050 laptop.
+- **Measured:** average {{AVG_CALLS}} tool calls and {{AVG_LATENCY}} s per question on an RTX 5050 laptop.
 
 **Illustrative pricing (example only, not validated with customers):**
 

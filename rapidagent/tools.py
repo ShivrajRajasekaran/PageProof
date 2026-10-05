@@ -83,15 +83,24 @@ def _extract_headings(doc: pymupdf.Document) -> tuple[list[dict], str]:
         return [], "none"
     body = size_chars.most_common(1)[0][0]
 
+    bare_num_pos: dict[int, list[float]] = {}  # (page -> y) of bold bare section numbers
+    for ln in lines:
+        if ln["bold"] and re.fullmatch(r"\d+(\.\d+){0,3}\.?", ln["text"].strip()):
+            bare_num_pos.setdefault(ln["page"], []).append(ln["y"])
     cands = []
     for ln in lines:
         t = clean_text(ln["text"]).strip()
         if not t or len(t) > 110:
             continue
         bigger = ln["size"] >= body * 1.15
-        numbered_bold = ln["bold"] and ln["size"] >= body * 0.95 and _NUMBERED.match(t) and len(t) < 80
-        if bigger or numbered_bold:
+        bold_ok = ln["bold"] and ln["size"] >= body * 0.95
+        numbered_bold = bold_ok and _NUMBERED.match(t) and len(t) < 80
+        bare_num_bold = bold_ok and re.fullmatch(r"\d+(\.\d+){0,3}\.?", t)  # "1" / "3.1" printed apart from its title
+        slightly_bigger_bold = bold_ok and ln["size"] >= body * 1.05 and len(t) < 80  # e.g. 12pt bold headings, 10.9pt body
+        if bigger or numbered_bold or bare_num_bold or slightly_bigger_bold:
             cands.append({**ln, "text": t})
+        elif bold_ok and len(t) < 70 and bare_num_pos.get(ln["page"]) and any(abs(y - ln["y"]) < 5 for y in bare_num_pos[ln["page"]]):
+            cands.append({**ln, "text": t})  # title on the same baseline as a bold section number
 
     # merge pieces of one heading: same baseline (number + title) or consecutive same-size lines (wrapped titles)
     merged: list[dict] = []

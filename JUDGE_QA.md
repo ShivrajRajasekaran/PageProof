@@ -67,8 +67,11 @@ Remaining limits:
 - A dropped "not" can still clear 80% of the 3-grams.
 - It proves the quotes are real, **not** that the answer follows from them. A real quote of a superseded value still passes.
 
-**9. Why a confidence threshold of 0.4 and not 0.3?**
-Score +1 for a correct answer, 0 for a decline and −λ for a wrong answer. Answering then pays only if p > λ/(1+λ). The cutoff is 0.3 for λ≈0.43, 0.4 for λ≈0.67 and 0.5 for λ=1. The brief penalises guessing *more heavily* than declining, so 0.4 is the safer choice. Self-reported confidence is bimodal (grounded answers come in at 0.8 or higher), so the cutoff only removes the low cluster, and the grounding gate does most of the work. The evidence is `summary.threshold_sweep` in `logs/results_qwen3-8b_D_*.json`, recomputed offline in `eval.py` with no extra LLM calls. **If the sweep disagrees, say so.**
+**9. How did you choose your thresholds, and why not other values?**
+We have two thresholds, and we picked both from our own logged runs rather than in advance (slide 7, `logs/GROUNDING_SWEEP.md`, `logs/RESULTS.md`).
+- **Grounding gate 0.8 (the one that decides).** We replayed every benchmark answer against the pages the agent read. Every value from 0.5 to 0.8 keeps all correctly quoted answers. 0.9, or verbatim-only (1.0), wrongly blocks 1–2 more correct answers. 0.8 is the strictest value with no loss, and that strictness is what makes invented quotes fail.
+- **Confidence 0.4 (backstop only).** Score +1 for a correct answer, 0 for a decline and −λ for a wrong one; answering pays only if p > λ/(1+λ), so 0.4 corresponds to λ≈0.67. The honest finding: qwen3:8b reported 0.95–1.0 on *every* answered strategy-D question, wrong ones included, so any confidence threshold from 0 to 0.9 gives identical results on our data. Self-reported confidence is not calibrated, so we don't rely on it. That's why the grounding gate exists.
+- If asked "why not 0.3?": on our data, 0.3 and 0.4 behave the same. We keep 0.4 as a cheap safety net for a different model that does report low confidence, not because the data proves 0.4 beats 0.3.
 
 **10. How do you handle contradictions or superseded statements?**
 Three parts:
@@ -174,3 +177,12 @@ In priority order:
 6. Run the eval suite on every change.
 
 None of these needs RAG or a bigger budget.
+
+**26. What is the "decline check"?**
+In strategy D, `DocAgent.ask` (`agent.py`) does not accept a first `final_answer` with status `insufficient_information` while budget remains. It replies once with the unread search-hit pages (`_unread_hits`) and suggests a shorter or alternative keyword. The agent can still decline on its next attempt. We added it after the benchmark showed qwen3:8b giving up at 5/6 calls without reading a page its own search had found. It costs at most one extra LLM turn and stays inside the cap of 7 LLM calls.
+
+**27. Isn't "pages with the most matching words" a kind of semantic search?**
+No. It counts exact substring hits of the query's own words on each page (`search_keyword`, `tools.py`). There are no embeddings, synonyms or model. It runs only when the exact phrase and the all-words match both return nothing, and it requires at least 2 matching words. It exists because PDFs contain typos (the sample spells "Papert" as "Peppert") and small models search with several words at once.
+
+**28. How did you choose your thresholds?**
+From data, not by guessing. `grounding_sweep.py` replays every benchmark answer against the pages the agent actually read in that question; it makes no LLM calls. For the grounding gate, any value from 0.5 to 0.8 keeps all correctly quoted answers, while 0.9 or verbatim-only wrongly blocks 1–2 more. So 0.8 is the strictest value that costs nothing, and strictness is what defeats invented quotes. For confidence, we measured qwen3:8b at 0.95–1.0 on every answer, including wrong ones, so the 0.4 cutoff (the break-even if a wrong answer costs about ⅔ of a right one) is only a backstop. Limit: a real but outdated quote passes any quote threshold, so contradictions are handled by the "latest amendment wins" rule and the reserve call. See `logs/GROUNDING_SWEEP.md` and slide 7.

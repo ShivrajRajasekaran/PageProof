@@ -10,6 +10,8 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b")
 NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "16384"))
 THINK = os.environ.get("OLLAMA_THINK", "1") == "1"  # qwen3 reasoning mode; ignored by models without it
+MAX_TOKENS = int(os.environ.get("OLLAMA_MAX_TOKENS", "3072"))  # caps runaway reasoning so a turn cannot hang
+TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "240"))
 
 
 class OllamaBackend:
@@ -24,7 +26,7 @@ class OllamaBackend:
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "options": {"temperature": 0, "num_ctx": NUM_CTX},
+            "options": {"temperature": 0, "num_ctx": NUM_CTX, "num_predict": MAX_TOKENS},
             "keep_alive": "30m",
         }
         if tools:
@@ -33,10 +35,10 @@ class OllamaBackend:
             body["format"] = json_schema
         if self.think and "qwen3" in self.model:
             body["think"] = True
-        r = requests.post(f"{OLLAMA_URL}/api/chat", json=body, timeout=600)
+        r = requests.post(f"{OLLAMA_URL}/api/chat", json=body, timeout=TIMEOUT)
         if r.status_code != 200 and "think" in body:  # older server / model without thinking support
             body.pop("think")
-            r = requests.post(f"{OLLAMA_URL}/api/chat", json=body, timeout=600)
+            r = requests.post(f"{OLLAMA_URL}/api/chat", json=body, timeout=TIMEOUT)
         r.raise_for_status()
         self.calls += 1
         msg = r.json()["message"]
